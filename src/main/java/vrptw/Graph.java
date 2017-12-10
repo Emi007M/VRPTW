@@ -1,6 +1,9 @@
 package vrptw;
 
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
+import lombok.Setter;
 import vrptw.node.Node;
 import vrptw.node.Position;
 
@@ -12,6 +15,8 @@ import java.util.stream.Collectors;
 
 
 @Getter
+@AllArgsConstructor
+@EqualsAndHashCode
 public class Graph {
 
     private List<Node> customers;
@@ -24,6 +29,10 @@ public class Graph {
         this.customers.remove(0);
 
         this.depot.setVisited(true);
+    }
+
+    public Graph(Graph graph) {
+        this(new ArrayList<Node>(graph.customers), new Node(graph.depot));
     }
 
 

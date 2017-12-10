@@ -1,16 +1,21 @@
 package vrptw;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.EqualsAndHashCode;
 import vrptw.node.Node;
 import vrptw.node.Position;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Getter
 @Setter
-public class Vehicle {
+@EqualsAndHashCode
+@AllArgsConstructor
+public class Vehicle implements Comparable<Vehicle>{
 
     public static int totalCapacity;
     private int capacity;
@@ -21,7 +26,6 @@ public class Vehicle {
         capacity = totalCapacity;
         path = new ArrayList<>();
     }
-
 
     public String readRoute() {
         String ret = "";
@@ -111,5 +115,10 @@ public class Vehicle {
         path.add(single_path);
     }
 
-
+    @Override
+    public int compareTo(Vehicle otherVehicle) {
+        double distance = PathRepository.calcTotalDistance(path.get(0));
+        double otherDistance = PathRepository.calcTotalDistance(otherVehicle.getPath().get(0));
+        return Double.compare(distance, otherDistance);
+    }
 }
