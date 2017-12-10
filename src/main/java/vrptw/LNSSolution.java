@@ -19,7 +19,13 @@ public class LNSSolution implements Comparable<LNSSolution>{
     private double totalDistance;
 
     public LNSSolution(LNSSolution otherSolution) {
-        this(new ArrayList<Vehicle>(otherSolution.fleet), new Graph(otherSolution.graph), otherSolution.totalDistance);
+        List <Vehicle> newFleet = new ArrayList<>();
+        for (Vehicle v : otherSolution.getFleet()) {
+            newFleet.add(new Vehicle(v));
+        }
+        this.fleet = newFleet;
+        this.graph = new Graph(otherSolution.graph);
+        this.totalDistance = otherSolution.totalDistance;
     }
 
     // TODO: modify compare method to include number of vehicles used and not only distance

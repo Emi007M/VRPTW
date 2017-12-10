@@ -20,47 +20,54 @@ public class Vehicle implements Comparable<Vehicle>{
     public static int totalCapacity;
     private int capacity;
 
-    private List<List<Node>> path;
+    private List<Node> path;
 
     public Vehicle() {
         capacity = totalCapacity;
         path = new ArrayList<>();
     }
-
+    public Vehicle(Vehicle otherVehicle) {
+        this.capacity = otherVehicle.capacity;
+        this.path = new ArrayList<>(otherVehicle.path);
+    }
+    public void setPath(List<Node> path) {
+        this.path = path;
+        int newCapacity = this.capacity;
+        for (Node customer : path) {
+            newCapacity -= customer.getDemand();
+        }
+        this.setCapacity(newCapacity);
+    }
     public String readRoute() {
         String ret = "";
         int i = 1;
         double time = 0;
         int initial_capacity = totalCapacity;
-        for (List<Node> p : path) {
+        for (int index = 0; index < path.size(); index ++) {
             // ret += "\n-part " + 1 + ":\n";
+           ret += "\ncapacity=" + initial_capacity + "\n";
 
+            if (index != 0) {
+                double dist = Position.getDistance(path.get(index - 1).getPos(), path.get(index).getPos());
+                time += dist;
+                ret += "moving by " + dist + "\n";
+            }
 
-            for (int n = 0; n < p.size(); n++) {
-                ret += "\ncapacity=" + initial_capacity + "\n";
+            ret += "t:" + time + " - in location " + path.get(index).getId() + " " + path.get(index).getPos() +
+                    " with window " + path.get(index).getTimeWindow() + " serving for " + path.get(index).getServiceTime() + "\n";
 
-                if (n != 0) {
-                    double dist = Position.getDistance(p.get(n - 1).getPos(), p.get(n).getPos());
-                    time += dist;
-                    ret += "moving by " + dist + "\n";
+            if (index != 0) {
+                if (time < path.get(index).getTimeWindow().getFrom()) {
+                    time = path.get(index).getTimeWindow().getFrom() + path.get(index).getServiceTime();
+                } else {
+                    time += path.get(index).getServiceTime();
                 }
-
-                ret += "t:" + time + " - in location " + p.get(n).getId() + " " + p.get(n).getPos() + " with window " + p.get(n).getTimeWindow() + " serving for " + p.get(n).getServiceTime() + "\n";
-
-                if (n != 0) {
-                    if (time < p.get(n).getTimeWindow().getFrom()) {
-                        time = p.get(n).getTimeWindow().getFrom() + p.get(n).getServiceTime();
-                    } else {
-                        time += p.get(n).getServiceTime();
-                    }
-                    ret += "serving finished at " + time + "\n";
-
-                }
-                initial_capacity -= p.get(n).getDemand();
+                ret += "serving finished at " + time + "\n";
 
             }
-        }
+            initial_capacity -= path.get(index).getDemand();
 
+        }
         return ret;
     }
 
@@ -70,7 +77,7 @@ public class Vehicle implements Comparable<Vehicle>{
      * @param depot
      * @param nodes only not visited
      */
-    @Deprecated
+    // @Deprecated - not any more
     public void visitAsMuchAsYouCanWhateverHow(Node depot, List<Node> nodes) {
 
         List<Node> single_path = new ArrayList<>();
@@ -112,13 +119,14 @@ public class Vehicle implements Comparable<Vehicle>{
 
         single_path.add(depot);
 
-        path.add(single_path);
+        path = single_path;
     }
 
     @Override
     public int compareTo(Vehicle otherVehicle) {
-        double distance = PathRepository.calcTotalDistance(path.get(0));
-        double otherDistance = PathRepository.calcTotalDistance(otherVehicle.getPath().get(0));
+        double distance = PathRepository.calcTotalDistance(path);
+        double otherDistance = PathRepository.calcTotalDistance(otherVehicle.getPath());
         return Double.compare(distance, otherDistance);
     }
+
 }

@@ -19,8 +19,8 @@ public class Main {
     private static List<Vehicle> fleet;
     private static Graph graph;
 
-    private static int NUMBER_OF_ITERATIONS = 1000;
-    private static double REMOVAL_FACTOR = 0.15;
+    private static int NUMBER_OF_ITERATIONS = 10000;
+    private static double REMOVAL_FACTOR = 0.30;
 
     public static void main(String[] args) throws FileNotFoundException {
 
@@ -33,7 +33,7 @@ public class Main {
 
 
         double total_distance = 0;
-        // Bruteforcing VRPTW - init solution
+     /*   // Bruteforcing VRPTW - init solution
         while (!graph.getUnvisitedCustomers().isEmpty()) {
 
             Vehicle v = new Vehicle();
@@ -47,9 +47,7 @@ public class Main {
             path.addAll(PathRepository.constructPath(currentPath, graph.getDepot(), graph.getUnvisitedCustomers(), v.getCapacity(), 0.0, 0.0));
             path.forEach(n -> n.setVisited(true));
 
-            List<List<Node>> p = new ArrayList<>();
-            p.add(path);
-            v.setPath(p);
+            v.setPath(path);
 
             total_distance += PathRepository.calcTotalDistance(path);
             System.out.println("\n-vrptw.Vehicle " + fleet.size());
@@ -57,51 +55,83 @@ public class Main {
 
         }
         System.out.println("\nSummary brute force: vehicles=" + fleet.size() + ", total distance=" + total_distance);
+    */
+        // make initial solution - one vehicle per one customer
+     /*   for (Node customer : graph.getCustomers()) {
+            Vehicle v = new Vehicle();
+            fleet.add(v);
+            List<Node> path = new ArrayList<>();
+            path.add(graph.getDepot());
+            path.add(customer);
+            path.add(graph.getDepot());
+            v.setPath(path);
+            customer.setVisited(true);
+            total_distance += PathRepository.calcTotalDistance(path);
+        }*/
+
+        while (!graph.getUnvisitedCustomers().isEmpty()) {
+
+            Vehicle v = new Vehicle();
+            fleet.add(v);
+
+            v.visitAsMuchAsYouCanWhateverHow(graph.getDepot(),graph.getUnvisitedCustomers());
+            total_distance += PathRepository.calcTotalDistance(v.getPath());
+        }
+
+        System.out.println("\nSummary after initialisation: vehicles=" + fleet.size() +
+                ", total distance=" + total_distance);
 
         boolean isEnd = false;
         int iterator = 0;
-
-
         // init best solution:
        LNSSolution bestSolution = new LNSSolution(fleet, graph, total_distance);
 
        int numberOfCustomersToRemove = (int) Math.round(REMOVAL_FACTOR * graph.getCustomers().size());
 
-       while (isEnd && iterator < NUMBER_OF_ITERATIONS) {
+       while (!isEnd && iterator < NUMBER_OF_ITERATIONS) {
 
+            LNSSolution solutionToWorkWith = new LNSSolution(bestSolution);
             List<Node> freeCustomers = new ArrayList<>();
             // select customers to remove
-            List<Node> allCustomers = new ArrayList<>(graph.getCustomers());
+            List<Node> allCustomers = solutionToWorkWith.getGraph().getCustomers();
+            //System.out.println("aaaaaaa " + allCustomers.size());
             for (int i = 0; i < numberOfCustomersToRemove; i++) {
                 int indexToRemove = random.nextInt(allCustomers.size());
-                freeCustomers.add(new Node(allCustomers.get(indexToRemove)));
+                freeCustomers.add(allCustomers.get(indexToRemove));
                 allCustomers.remove(indexToRemove);
             }
             // remove customers from vehicle paths
-            for (Vehicle vehicle : bestSolution.getFleet()) {
-                vehicle.getPath().removeAll(freeCustomers);
+            for (Vehicle vehicle : solutionToWorkWith.getFleet()) {
+                for (Node customerToBeRemoved : freeCustomers) {
+                    if (vehicle.getPath().contains(customerToBeRemoved)) {
+                        vehicle.getPath().remove(customerToBeRemoved);
+                        vehicle.setCapacity(vehicle.getCapacity() + customerToBeRemoved.getDemand());
+                    }
+                }
             }
             // remove unused vehicles
             List<Vehicle> vehiclesToRemove = new ArrayList<>();
-            for (Vehicle vehicle : bestSolution.getFleet()) {
+            for (Vehicle vehicle : solutionToWorkWith.getFleet()) {
                 // only depots are left in a path
                 if (vehicle.getPath().size() < 3) {
+                   // System.out.println("vehicle removed");
                     vehiclesToRemove.add(vehicle);
                 }
             }
-            bestSolution.getFleet().removeAll(vehiclesToRemove);
-
+           solutionToWorkWith.getFleet().removeAll(vehiclesToRemove);
+            //System.out.println(solutionToWorkWith.getFleet().size());
 
             // try to insert each free customer
-            LNSSolution solutionToWorkWith = new LNSSolution(bestSolution);
+            Collections.shuffle(freeCustomers);
             List<Node> notInsertedCustomers = new ArrayList<>();
             for (Node customer : freeCustomers) {
-                List<Vehicle> newVehiclesForSingleCustomer = new ArrayList<>();
+                customer.setVisited(false);
+                List<Vehicle> possibleVehicleSolutions = new ArrayList<>();
                 Map<Vehicle, Vehicle> vehicleReplacementMap = new HashMap<>();
                 // for each vehicle find solution
+                boolean isSolutionFound = false;
                 for (Vehicle vehicle : solutionToWorkWith.getFleet()) {
                     Vehicle newVehicle = new Vehicle();
-                    vehicleReplacementMap.put(newVehicle, vehicle);
                     List<Node> currentPath = new ArrayList<>();
                     currentPath.add(solutionToWorkWith.getGraph().getDepot());
                     List<Node> path = new ArrayList<>();
@@ -109,53 +139,62 @@ public class Main {
 
                     //add customers which new vehicle has to serve
                     List<Node> customersToVisit = new ArrayList<>();
-                    customersToVisit.addAll(vehicle.getPath().get(0));
+                    customersToVisit.addAll(vehicle.getPath());
                     //remove depots from customer list
                     customersToVisit.removeAll(Collections.singleton(solutionToWorkWith.getGraph().getDepot()));
                     customersToVisit.add(customer);
+
 
                     //find optimal path joining customers
                     path.addAll(PathRepository.constructPath(currentPath, solutionToWorkWith.getGraph().getDepot(), customersToVisit,
                             newVehicle.getCapacity(), 0.0, 0.0));
 
-                    path.forEach(n -> n.setVisited(true));
-
-                    List<List<Node>> p = new ArrayList<>();
-                    p.add(path);
-                    newVehicle.setPath(p);
+                    newVehicle.setPath(path);
 
                     // check if all customers can be connected - size equals all customers + 2 times depot
                     if (path.size() == customersToVisit.size() + 2) {
-                        newVehiclesForSingleCustomer.add(newVehicle);
+                        possibleVehicleSolutions.add(newVehicle);
+                        vehicleReplacementMap.put(newVehicle, vehicle);
                     }
                 }
 
                 // chose best solution for this customer
-                if (newVehiclesForSingleCustomer.size() == 0) {
+                if (possibleVehicleSolutions.size() == 0) {
                     // no solutions are possible
                     notInsertedCustomers.add(customer);
+                    //System.out.println("baad: customer not inserted " + customer.isVisited());
                 } else {
                     // choose vehicle path with smallest distance
-                    Collections.sort(newVehiclesForSingleCustomer);
+                    Collections.sort(possibleVehicleSolutions);
                     // choose best vehicle
-                    Vehicle bestVehicle = newVehiclesForSingleCustomer.get(0);
+                    Vehicle bestVehicle = possibleVehicleSolutions.get(0);
                     Vehicle vehicleToBeReplaced = vehicleReplacementMap.get(bestVehicle);
                     // update a fleet with new Vehicle
                     vehicleToBeReplaced.setPath(bestVehicle.getPath());
+                    customer.setVisited(true);
+                  //  System.out.println("restored customer LNS");
                 }
+                solutionToWorkWith.getGraph().getCustomers().add(customer);
             }
-            // set not visited customers in a graph
-           for (Node customer : solutionToWorkWith.getGraph().getCustomers()) {
-                if (notInsertedCustomers.contains(customer)) {
-                    customer.setVisited(false);
-                }
+            //update total distance of all vehicles
+           double totalDistance = 0.0;
+           for (Vehicle vehicle : solutionToWorkWith.getFleet()) {
+                totalDistance += PathRepository.calcTotalDistance(vehicle.getPath());
            }
+           solutionToWorkWith.setTotalDistance(totalDistance);
+          //  System.out.println(solutionToWorkWith.getFleet().size() + " " + totalDistance);
+
+            //System.out.println(solutionToWorkWith.getTotalDistance());
+            // set not visited customers in a graph
+          // System.out.println("not inserted customers" + notInsertedCustomers.size());
+          //  System.out.println(solutionToWorkWith.getGraph().getUnvisitedCustomers().size());
+
             // for each not inserted do brute force again with new vehicle(s)
            while (!solutionToWorkWith.getGraph().getUnvisitedCustomers().isEmpty()) {
 
                Vehicle v = new Vehicle();
                solutionToWorkWith.getFleet().add(v);
-
+              //  System.out.println("vehicle added");
                List<Node> currentPath = new ArrayList<>();
                currentPath.add(solutionToWorkWith.getGraph().getDepot());
                List<Node> path = new ArrayList<>();
@@ -163,23 +202,33 @@ public class Main {
                path.add(solutionToWorkWith.getGraph().getDepot());
                path.addAll(PathRepository.constructPath(currentPath, solutionToWorkWith.getGraph().getDepot(),
                        solutionToWorkWith.getGraph().getUnvisitedCustomers(), v.getCapacity(), 0.0, 0.0));
-               path.forEach(n -> n.setVisited(true));
 
-               List<List<Node>> p = new ArrayList<>();
-               p.add(path);
-               v.setPath(p);
+               v.setPath(path);
+               for (Node customer : path) {
+                   if (!customer.equals(solutionToWorkWith.getGraph().getDepot())) {
+                       customer.setVisited(true);
+                       //System.out.println("restored customers BRUTE FORCE");
+                   }
+               }
 
                double newDistance = solutionToWorkWith.getTotalDistance() + PathRepository.calcTotalDistance(path) ;
                solutionToWorkWith.setTotalDistance(newDistance);
+
            }
 
             // if solution is better than best solution update
-            if (solutionToWorkWith.compareTo(bestSolution) > 0) {
+            if (solutionToWorkWith.compareTo(bestSolution) < 0) {
+               // System.out.println("gotta better solution " + bestSolution.getTotalDistance() + "->" +
+               //         solutionToWorkWith.getTotalDistance());
                 bestSolution = solutionToWorkWith;
+            } else {
+               // System.out.println("gotta worse solution " + bestSolution.getTotalDistance() + "->" +
+                //      solutionToWorkWith.getTotalDistance());
             }
-            iterator++;
+           iterator++;
         }
-
+        System.out.println("\nSummary after LNS: vehicles=" + bestSolution.getFleet().size() +
+                ", total distance=" + bestSolution.getTotalDistance());
     }
 
     private static int readCapacity(String capacityDir) throws FileNotFoundException {
