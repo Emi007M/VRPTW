@@ -1,262 +1,162 @@
 package vrptw;
 
-import com.sun.org.apache.xpath.internal.operations.Bool;
-import vrptw.node.Node;
-import vrptw.node.Position;
-import vrptw.node.TimeWindow;
+import vrptw.OriginalMain;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.util.*;
-import java.util.stream.Collectors;
+import javafx.application.Application;
+import javafx.geometry.Pos;
+import javafx.scene.Scene;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
+import javafx.stage.Stage;
 
-
-public class Main {
-
-    private static String nodesDir = "R101.100.txt";
-    private static String capacityDir = "capacity.txt";
-
-    private static List<Vehicle> fleet;
-    private static Graph graph;
-
-    private static int NUMBER_OF_ITERATIONS = 10000;
-    private static double REMOVAL_FACTOR = 0.30;
-
-    public static void main(String[] args) throws FileNotFoundException {
-
-        fleet = new ArrayList<>();
-        graph = new Graph(readNodes(nodesDir));
-        Vehicle.totalCapacity = readCapacity(capacityDir);
-        Random random = new Random();
-//        Node depot = graph.getDepot();
-//        List<Node> closest = graph.findClosestNodesInGraph(depot, 5);
+import java.util.ArrayList;
 
 
-        double total_distance = 0;
-     /*   // Bruteforcing VRPTW - init solution
-        while (!graph.getUnvisitedCustomers().isEmpty()) {
+public class Main extends Application {
 
-            Vehicle v = new Vehicle();
-            fleet.add(v);
+    Stage window;
+    Scene scene1;
+    Button button1;
+    String filepath = "NULL";
+    VBox layout1 = new VBox(20);
 
-            List<Node> currentPath = new ArrayList<>();
-            currentPath.add(graph.getDepot());
-            List<Node> path = new ArrayList<>();
-            //main part of searching is PathRepository.constructPath
-            path.add(graph.getDepot());
-            path.addAll(PathRepository.constructPath(currentPath, graph.getDepot(), graph.getUnvisitedCustomers(), v.getCapacity(), 0.0, 0.0));
-            path.forEach(n -> n.setVisited(true));
-
-            v.setPath(path);
-
-            total_distance += PathRepository.calcTotalDistance(path);
-            System.out.println("\n-vrptw.Vehicle " + fleet.size());
-            System.out.println(v.readRoute());
-
-        }
-        System.out.println("\nSummary brute force: vehicles=" + fleet.size() + ", total distance=" + total_distance);
-    */
-        // make initial solution - one vehicle per one customer
-     /*   for (Node customer : graph.getCustomers()) {
-            Vehicle v = new Vehicle();
-            fleet.add(v);
-            List<Node> path = new ArrayList<>();
-            path.add(graph.getDepot());
-            path.add(customer);
-            path.add(graph.getDepot());
-            v.setPath(path);
-            customer.setVisited(true);
-            total_distance += PathRepository.calcTotalDistance(path);
-        }*/
-
-        while (!graph.getUnvisitedCustomers().isEmpty()) {
-
-            Vehicle v = new Vehicle();
-            fleet.add(v);
-
-            v.visitAsMuchAsYouCanWhateverHow(graph.getDepot(),graph.getUnvisitedCustomers());
-            total_distance += PathRepository.calcTotalDistance(v.getPath());
-        }
-
-        System.out.println("\nSummary after initialisation: vehicles=" + fleet.size() +
-                ", total distance=" + total_distance);
-
-        boolean isEnd = false;
-        int iterator = 0;
-        // init best solution:
-       LNSSolution bestSolution = new LNSSolution(fleet, graph, total_distance);
-
-       int numberOfCustomersToRemove = (int) Math.round(REMOVAL_FACTOR * graph.getCustomers().size());
-
-       while (!isEnd && iterator < NUMBER_OF_ITERATIONS) {
-
-            LNSSolution solutionToWorkWith = new LNSSolution(bestSolution);
-            List<Node> freeCustomers = new ArrayList<>();
-            // select customers to remove
-            List<Node> allCustomers = solutionToWorkWith.getGraph().getCustomers();
-            //System.out.println("aaaaaaa " + allCustomers.size());
-            for (int i = 0; i < numberOfCustomersToRemove; i++) {
-                int indexToRemove = random.nextInt(allCustomers.size());
-                freeCustomers.add(allCustomers.get(indexToRemove));
-                allCustomers.remove(indexToRemove);
-            }
-            // remove customers from vehicle paths
-            for (Vehicle vehicle : solutionToWorkWith.getFleet()) {
-                for (Node customerToBeRemoved : freeCustomers) {
-                    if (vehicle.getPath().contains(customerToBeRemoved)) {
-                        vehicle.getPath().remove(customerToBeRemoved);
-                        vehicle.setCapacity(vehicle.getCapacity() + customerToBeRemoved.getDemand());
-                    }
-                }
-            }
-            // remove unused vehicles
-            List<Vehicle> vehiclesToRemove = new ArrayList<>();
-            for (Vehicle vehicle : solutionToWorkWith.getFleet()) {
-                // only depots are left in a path
-                if (vehicle.getPath().size() < 3) {
-                   // System.out.println("vehicle removed");
-                    vehiclesToRemove.add(vehicle);
-                }
-            }
-           solutionToWorkWith.getFleet().removeAll(vehiclesToRemove);
-            //System.out.println(solutionToWorkWith.getFleet().size());
-
-            // try to insert each free customer
-            Collections.shuffle(freeCustomers);
-            List<Node> notInsertedCustomers = new ArrayList<>();
-            for (Node customer : freeCustomers) {
-                customer.setVisited(false);
-                List<Vehicle> possibleVehicleSolutions = new ArrayList<>();
-                Map<Vehicle, Vehicle> vehicleReplacementMap = new HashMap<>();
-                // for each vehicle find solution
-                boolean isSolutionFound = false;
-                for (Vehicle vehicle : solutionToWorkWith.getFleet()) {
-                    Vehicle newVehicle = new Vehicle();
-                    List<Node> currentPath = new ArrayList<>();
-                    currentPath.add(solutionToWorkWith.getGraph().getDepot());
-                    List<Node> path = new ArrayList<>();
-                    path.add(solutionToWorkWith.getGraph().getDepot());
-
-                    //add customers which new vehicle has to serve
-                    List<Node> customersToVisit = new ArrayList<>();
-                    customersToVisit.addAll(vehicle.getPath());
-                    //remove depots from customer list
-                    customersToVisit.removeAll(Collections.singleton(solutionToWorkWith.getGraph().getDepot()));
-                    customersToVisit.add(customer);
-
-
-                    //find optimal path joining customers
-                    path.addAll(PathRepository.constructPath(currentPath, solutionToWorkWith.getGraph().getDepot(), customersToVisit,
-                            newVehicle.getCapacity(), 0.0, 0.0));
-
-                    newVehicle.setPath(path);
-
-                    // check if all customers can be connected - size equals all customers + 2 times depot
-                    if (path.size() == customersToVisit.size() + 2) {
-                        possibleVehicleSolutions.add(newVehicle);
-                        vehicleReplacementMap.put(newVehicle, vehicle);
-                    }
-                }
-
-                // chose best solution for this customer
-                if (possibleVehicleSolutions.size() == 0) {
-                    // no solutions are possible
-                    notInsertedCustomers.add(customer);
-                    //System.out.println("baad: customer not inserted " + customer.isVisited());
-                } else {
-                    // choose vehicle path with smallest distance
-                    Collections.sort(possibleVehicleSolutions);
-                    // choose best vehicle
-                    Vehicle bestVehicle = possibleVehicleSolutions.get(0);
-                    Vehicle vehicleToBeReplaced = vehicleReplacementMap.get(bestVehicle);
-                    // update a fleet with new Vehicle
-                    vehicleToBeReplaced.setPath(bestVehicle.getPath());
-                    customer.setVisited(true);
-                  //  System.out.println("restored customer LNS");
-                }
-                solutionToWorkWith.getGraph().getCustomers().add(customer);
-            }
-            //update total distance of all vehicles
-           double totalDistance = 0.0;
-           for (Vehicle vehicle : solutionToWorkWith.getFleet()) {
-                totalDistance += PathRepository.calcTotalDistance(vehicle.getPath());
-           }
-           solutionToWorkWith.setTotalDistance(totalDistance);
-          //  System.out.println(solutionToWorkWith.getFleet().size() + " " + totalDistance);
-
-            //System.out.println(solutionToWorkWith.getTotalDistance());
-            // set not visited customers in a graph
-          // System.out.println("not inserted customers" + notInsertedCustomers.size());
-          //  System.out.println(solutionToWorkWith.getGraph().getUnvisitedCustomers().size());
-
-            // for each not inserted do brute force again with new vehicle(s)
-           while (!solutionToWorkWith.getGraph().getUnvisitedCustomers().isEmpty()) {
-
-               Vehicle v = new Vehicle();
-               solutionToWorkWith.getFleet().add(v);
-              //  System.out.println("vehicle added");
-               List<Node> currentPath = new ArrayList<>();
-               currentPath.add(solutionToWorkWith.getGraph().getDepot());
-               List<Node> path = new ArrayList<>();
-               //main part of searching is PathRepository.constructPath
-               path.add(solutionToWorkWith.getGraph().getDepot());
-               path.addAll(PathRepository.constructPath(currentPath, solutionToWorkWith.getGraph().getDepot(),
-                       solutionToWorkWith.getGraph().getUnvisitedCustomers(), v.getCapacity(), 0.0, 0.0));
-
-               v.setPath(path);
-               for (Node customer : path) {
-                   if (!customer.equals(solutionToWorkWith.getGraph().getDepot())) {
-                       customer.setVisited(true);
-                       //System.out.println("restored customers BRUTE FORCE");
-                   }
-               }
-
-               double newDistance = solutionToWorkWith.getTotalDistance() + PathRepository.calcTotalDistance(path) ;
-               solutionToWorkWith.setTotalDistance(newDistance);
-
-           }
-
-            // if solution is better than best solution update
-            if (solutionToWorkWith.compareTo(bestSolution) < 0) {
-               // System.out.println("gotta better solution " + bestSolution.getTotalDistance() + "->" +
-               //         solutionToWorkWith.getTotalDistance());
-                bestSolution = solutionToWorkWith;
-            } else {
-               // System.out.println("gotta worse solution " + bestSolution.getTotalDistance() + "->" +
-                //      solutionToWorkWith.getTotalDistance());
-            }
-           iterator++;
-        }
-        System.out.println("\nSummary after LNS: vehicles=" + bestSolution.getFleet().size() +
-                ", total distance=" + bestSolution.getTotalDistance());
+    public String getFilepath() {
+        return filepath;
     }
 
-    private static int readCapacity(String capacityDir) throws FileNotFoundException {
-        int capacity = 0;
-        File file = new File(Main.class.getClassLoader().getResource(capacityDir).getPath());
-        Scanner sc = new Scanner(file);
-        if (sc.hasNextInt()) {
-            capacity = sc.nextInt();
-        }
-        sc.close();
-        return capacity;
+    public static void main(String[] args) {
+        launch(args);
     }
 
-    private static List<Node> readNodes(String nodesDir) throws FileNotFoundException {
-        List<Node> nodes = new ArrayList<>();
-        File file = new File(Main.class.getClassLoader().getResource(nodesDir).getPath());
-        Scanner sc = new Scanner(file);
-        while (sc.hasNextLine()) {
-            String line = sc.nextLine();
-            if (!line.isEmpty()) {
-                List<Integer> n = Arrays.stream(line.split(" ")).map(String::trim).filter(s -> !s.isEmpty()).map(s -> new Integer(new Double(s).intValue())).collect(Collectors.toList());
-                nodes.add(new Node(n.get(0), new Position(n.get(1), n.get(2)), n.get(3), new TimeWindow(n.get(4), n.get(5)), n.get(6), false));
-            }
-        }
-        sc.close();
+    @Override
+    public void start(Stage primaryStage) throws Exception{
+        //window
+        window = primaryStage;
+        window.setTitle("VRPTW - LNS");
 
-        return nodes;
+        //label
+        Label label1 = new Label("Choose file to open and click the button below to compute.");
+
+        //label2
+        Label label2 = new Label("Currently selected: " + filepath);
+
+        //canvas
+        Canvas canvas = new Canvas(1000, 600);
+        GraphicsContext context = canvas.getGraphicsContext2D();
+
+        //fileMenu
+        Menu fileMenu = new Menu("File");
+
+        //fileMenu items
+        MenuItem openFile = new MenuItem("Open");
+        openFile.setOnAction(e -> {
+            filepath = SelectionBox.display(window);
+            label2.setText("Currently selected: " + filepath);
+        });
+
+        MenuItem clearCanvas = new MenuItem("Clear");
+        clearCanvas.setOnAction(e -> {
+            context.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
+        });
+
+        fileMenu.getItems().add(openFile);
+        fileMenu.getItems().add(new SeparatorMenuItem());
+        fileMenu.getItems().add(clearCanvas);
+
+        //runMenu
+        Menu runMenu = new Menu("Run");
+
+        //runMenu items
+        MenuItem run = new MenuItem("Run");
+        run.setOnAction(e -> {
+            runCalc(label2, layout1, context, canvas);
+        });
+        runMenu.getItems().add(run);
+
+        //exitMenu
+        Menu exitMenu = new Menu("Exit");
+
+        //exitMenu items
+        MenuItem exit = new MenuItem("Exit");
+        exit.setOnAction(e -> {
+            System.out.println("exit");
+            System.out.println("----");
+            System.exit(0);
+        });
+        exitMenu.getItems().add(exit);
+
+        //Menu bar
+        MenuBar menuBar = new MenuBar();
+        menuBar.getMenus().addAll(fileMenu, runMenu, exitMenu);
+
+        //button1
+        button1 = new Button();
+        button1.setText("Run");
+        button1.setOnAction(e -> {
+            String endOfPath = filepath.substring(filepath.lastIndexOf("\\") + 1);
+            OriginalMain.setNodesDir(endOfPath);
+            runCalc(label2, layout1, context, canvas);
+        });
+
+        //Layout1 - children are laid out in vertical column
+        //VBox layout1 = new VBox(20);
+        layout1.getChildren().addAll(menuBar, label1, label2, button1, canvas);
+        layout1.setAlignment(Pos.TOP_CENTER);
+
+        scene1 = new Scene(layout1, 1080, 720);
+        setUserAgentStylesheet(STYLESHEET_CASPIAN);
+
+        scene1.setFill(Color.LIGHTGREY);
+        window.setScene(scene1);
+        window.show();
     }
 
+    public void runCalc(Label label2, VBox layout1, GraphicsContext context, Canvas canvas){
+        if (filepath == "NULL") {
+            System.out.println("Select file first!");
+        }
+        else{
+            System.out.println("Computing ... " + filepath);
+            OriginalMain newComputation = new OriginalMain();
+            newComputation.originalMain();
+            drawShapes(context, canvas);
+        }
+        label2.setText("Currently selected: " + filepath);
+    }
 
+    private void drawShapes(GraphicsContext gc, Canvas canvas) {
+
+        //gc.setFill(Color.color(Math.random(), Math.random(), Math.random()));
+
+        // vehicles<singleVehicle[x_1, x_2, ... , x_n], singleVehicle[y_1, y_2, ... , y_n]>
+        for (int i = 0; i < OriginalMain.getPointsToDraw().size(); i++)
+        {
+            gc.setFill(Color.color(Math.random(), Math.random(), Math.random()));
+            gc.setStroke(Color.color(Math.random(), Math.random(), Math.random()));
+            gc.setLineWidth(5);
+            gc.strokePolyline(OriginalMain.getPointsToDraw().get(i).get(0), OriginalMain.getPointsToDraw().get(i).get(1),
+                    OriginalMain.getPointsToDraw().get(i).get(1).length);
+        }
+
+//        gc.setFill(Color.color(Math.random(), Math.random(), Math.random()));
+//        gc.setStroke(Color.color(Math.random(), Math.random(), Math.random()));
+//        gc.setLineWidth(5);
+//        double[] xes = {500, randomWithRange(0,1000), randomWithRange(0,1000), randomWithRange(0,1000)};
+//        double[] ys = {300, randomWithRange(0,500), randomWithRange(0,500), randomWithRange(0,500)};
+//        int pointsTotal = xes.length;
+//        gc.strokePolyline(xes, ys, pointsTotal);
+//        gc.strokePolyline(new double[]{110, 140, 110, 140, 110},
+//                new double[]{210, 210, 240, 240, 210}, 5);
+//        gc.strokePolygon(new double[]{110+100, 140+100, 110+100, 140+100},
+//                new double[]{210, 210, 240, 240}, 4);
+    }
+
+    public int randomWithRange(int min, int max)
+    {
+        int range = (max - min) + 1;
+        return (int)(Math.random() * range) + min;
+    }
 }
